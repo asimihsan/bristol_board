@@ -6,7 +6,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0]).
+-export([start_link/0, say_hello/0]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -33,7 +33,7 @@ say_hello() ->
 
 handle_call(hello, _From, State) ->
   io:format("Hello from server!~n", []),
-  {reply, ok State};
+  {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
   {noreply, ok, State}.

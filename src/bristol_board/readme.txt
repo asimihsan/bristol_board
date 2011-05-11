@@ -23,6 +23,7 @@ cd rel
 %% How to build
 %% ------------------------------------
 ./rebar clean
+./rebar compile
 ./rebar generate
 chmod u+x rel/bristol_board/bin/bristol_board
 
