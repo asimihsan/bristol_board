@@ -92,7 +92,7 @@ def install_bare_essentials():
               use_sudo = True)    
     sudo("apt-get update")
     sudo("yes yes | apt-get upgrade")
-    sudo("yes yes | apt-get install git mercurial build-essential unzip python-software-properties ruby curl python-dev htop")
+    sudo("yes yes | apt-get install git mercurial build-essential unzip python-software-properties ruby curl python-dev htop vim vim-nox")
 
 def setup_timezone():
     logger = logging.getLogger("%s.setup_timezone" % (APP_NAME, ))
