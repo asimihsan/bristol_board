@@ -10,6 +10,21 @@
 # Take a fresh Ubuntu install and set it up to support 
 # Bristol board.  This will largely be installing source packages,
 # setting up files, creating services.
+#
+# How to use this file:
+# - Install Ubuntu 11.04 from scratch on Linode, or start a fresh
+#   EC2 AMI on AWS.
+# - Change the REMOTE_HOST, REMOTE_USERNAME, REMOTE_PASSWORD
+#   variables appropriately.  For EC2 you'll need to use KEY_FILENAME,
+#   and this is something you want to use on Linode as well.
+# - Run this script.  Will do all the dogwork of installing software
+#   and finicky little details about hardening.
+#
+# - The script will halt at "checkout_code".  This freezes because
+#   it doesn't know who github.com is, and this is good because we
+#   need to generate a new public key and add it to Github.
+# - SSH onto the box, run "ssh-keygen", paste the key into the
+#   Github account, then continue the "checkout_code" function.
 # ----------------------------------------------------------------------
 
 # ----------------------------------------------------------------------
@@ -20,13 +35,14 @@ import os
 import sys
 import logging
 import collections
+import pprint
 
 from boto.ec2.connection import EC2Connection
 from fabric.api import settings
 from fabric.contrib.console import confirm
 from fabric.operations import sudo, run
-from fabric.contrib.files import append, uncomment, sed
-from fabric.context_managers import cd
+from fabric.contrib.files import append, uncomment, sed, exists
+from fabric.context_managers import cd, path
 import fabric.network
 import colorama
 from colorama import Fore, Back, Style
@@ -50,7 +66,6 @@ logger = logging.getLogger(APP_NAME)
 # ----------------------------------------------------------------------
 #   Constants to change.
 # ----------------------------------------------------------------------
-REMOTE_HOST = "192.168.0.193"
 REMOTE_USERNAME = "ubuntu"
 
 # Set either REMOTE_PASSWORD or KEY_FILENAME, where the latter is a patch
@@ -79,10 +94,19 @@ def install_bare_essentials():
     sudo("yes yes | apt-get upgrade")
     sudo("yes yes | apt-get install git mercurial build-essential unzip python-software-properties ruby curl python-dev htop")
 
+def setup_timezone():
+    logger = logging.getLogger("%s.setup_timezone" % (APP_NAME, ))
+    logger.debug("entry.")
+    sudo("mv /etc/localtime /etc/localtime.backup")    
+    sudo("ln -sf /usr/share/zoneinfo/UTC /etc/localtime")
+    sudo("/sbin/hwclock --systohc")
+
 def install_erlang():
     logger = logging.getLogger("%s.install_erlang" % (APP_NAME, ))
     logger.debug("entry.")
-    sudo("yes yes | apt-get install curl m4 flex xsltproc fop libncurses5-dev unixodbc-dev")
+    sudo("yes yes | apt-get install curl m4 flex xsltproc fop libncurses5-dev unixodbc-dev openjdk-6-jre openjdk-6-jdk")
+    with cd("~"):
+        run("rm -rf otp_src_*")    
     with cd("~"):        
         run("wget http://www.erlang.org/download/otp_src_R14B02.tar.gz")
         run("tar xvf otp_src_R14B02.tar.gz")
@@ -96,7 +120,35 @@ def install_erlang():
 def install_postgresql():
     logger = logging.getLogger("%s.install_postgresql" % (APP_NAME, ))
     logger.debug("entry.")
-    sudo("yes yes | apt-get install postgresql postgresql-contrib")    
+    sudo(r"add-apt-repository ppa:pitti/postgresql")
+    sudo("apt-get update")
+    sudo("yes yes | apt-get install postgresql-9.0 libpq-dev")    
+    sudo("easy_install -U psycopg2")        
+    sudo("rm -rf /tmp/tmp*")
+    
+def init_postgresql():
+    logger = logging.getLogger("%s.init_postgresql" % (APP_NAME, ))
+    logger.debug("entry")
+    sudo("echo -e \"password\\npassword\" | passwd postgres")    
+    sudo("rm -f /var/lib/postgresql/.bash_profile")
+    sudo("echo export PATH=${PATH}:/usr/lib/postgresql/9.0/bin >> /var/lib/postgresql/.bash_profile", user="postgres")    
+    
+    sudo("service postgresql stop", user="postgres")            
+    sudo("rm -rf /var/lib/postgresql/9.0/main")        
+    sudo("initdb -D /var/lib/postgresql/9.0/main", user="postgres")    
+    if not exists(r"/var/lib/postgresql/9.0/main/server.crt", use_sudo = True):
+        sudo("ln -s /etc/ssl/certs/ssl-cert-snakeoil.pem /var/lib/postgresql/9.0/main/server.crt")
+    if not exists(r"/var/lib/postgresql/9.0/main/server.key", use_sudo = True):            
+        sudo("ln -s /etc/ssl/private/ssl-cert-snakeoil.key /var/lib/postgresql/9.0/main/server.key")
+    sudo("service postgresql start", user="postgres")    
+    
+    sudo("createuser -s ubuntu", user="postgres")
+    sudo("createdb database", user="postgres")
+    # sudo("psql -d template1 -c 'ALTER USER postgres WITH PASSWORD 'password';'", user="postgres")    
+    
+def setup_postgresql():
+    logger = logging.getLogger("%s.setup_postgresql" % (APP_NAME, ))
+    logger.debug("entry")
     
 def setup_python():
     logger = logging.getLogger("%s.setup_python" % (APP_NAME, ))
@@ -159,26 +211,43 @@ def harden():
     sudo("yes yes | apt-get install denyhosts")    
     sudo("cp /etc/denyhosts.conf /etc/denyhosts.conf.backup")
     sed(filename = "/etc/denyhosts.conf",
-        before = "AGE_RESET_VALID=5d",
+        before = "AGE_RESET_VALID.*=.*",
         after = "AGE_RESET_VALID=10m",
         use_sudo = True)
+        
+def checkout_code():
+    logger = logging.getLogger("%s.checkout_code" % (APP_NAME, ))
+    logger.debug("entry.")    
+    with cd("~"):
+        run("rm -rf bristol_board*")
+        run("git clone git@github.com:asimihsan/bristol_board.git")    
+        
+def setup_bash_profile():
+    logger = logging.getLogger("%s.setup_bash_profile" % (APP_NAME, ))
+    logger.debug("entry.")    
+    sudo("rm -f ~/.bash_profile")
+    append(filename = "~/.bash_profile",
+           text = "export PATH=${PATH}:/usr/lib/postgresql/9.0/bin")         
     
-def call_fabric_function(function, *args, **kwds):
+def call_fabric_function(function, remote_host, *args, **kwds):
     if KEY_FILENAME is not None:
-        with settings(host_string=REMOTE_HOST,
+        with settings(host_string=remote_host,
                       user=REMOTE_USERNAME,
                       key_filename=KEY_FILENAME):            
             function(*args, **kwds)
     else:
         assert(REMOTE_PASSWORD is not None)
-        with settings(host_string=REMOTE_HOST,
+        with settings(host_string=remote_host,
                       user=REMOTE_USERNAME,
                       password=REMOTE_PASSWORD):    
             function(*args, **kwds)        
     
 def main():
-    logger.info("Starting main.")
-    colorama.init()
+    logger.info("Starting main.  args: %s" % (sys.argv[1:], ))
+    if len(sys.argv) >= 2:
+        REMOTE_HOST = sys.argv[1]
+    colorama.init()    
+    logger.debug("REMOTE_HOST: %s" % (REMOTE_HOST, ))
     
     # ------------------------------------------------------------------
     #   What functions to call.  Uncomment / comment as you wish.
@@ -186,18 +255,25 @@ def main():
     #   but safe, albeit wasteful, to run again.
     # ------------------------------------------------------------------
     functions_to_call = [ \
-                         # install_bare_essentials,
-                         # install_erlang,
-                         install_haproxy
-                         # setup_python,
-                         # setup_ntp,
-                         # install_postgresql,
-                         # harden
+                         setup_timezone,
+                         install_bare_essentials,
+                         install_erlang,
+                         install_haproxy,
+                         setup_python,
+                         setup_ntp,
+                         harden,
+                         install_postgresql,
+                         init_postgresql,
+                         setup_postgresql,
+                         checkout_code,
+                         setup_bash_profile,
                         ]
     # ------------------------------------------------------------------
+    logger.info("executing the following functions:\n%s" % (pprint.pformat(functions_to_call), ))
     try:        
         for function_to_call in functions_to_call:
-            call_fabric_function(function_to_call)        
+            call_fabric_function(function_to_call,
+                                 remote_host = REMOTE_HOST)        
     finally:
         logger.info("Cleanup.")
         logger.debug("Disconnect all SSH sessions...")
