@@ -1,0 +1,24 @@
+%% ---------------------------------------------------------------------
+%% @author Asim Ihsan <asim.ihsan@gmail.com>
+%% @copyright 2011 Asim Ihsan
+%% ---------------------------------------------------------------------
+
+{application, bb_web,
+  [
+    {description, "Web layer of Bristol Board."},
+    {vsn, "0.0.1"},
+    {modules, []},
+    {registered, []},
+    {applications,
+      [
+        kernel,
+        stdlib,
+        inets,
+        crypto,
+        mochiweb,
+        webmachine
+      ]
+    },
+    {mod, {bb_web_app, []}},
+    {env, []}
+  ]}.

@@ -1,5 +1,9 @@
+%% ---------------------------------------------------------------------
+%% @author Asim Ihsan <asim.ihsan@gmail.com>
+%% @copyright 2011 Asim Ihsan
+%% ---------------------------------------------------------------------
 
--module(bristol_board_sup).
+-module(bb_database_sup).
 
 -behaviour(supervisor).
 
@@ -24,6 +28,5 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    BbServer = ?CHILD(bristol_board_server, worker),
-    {ok, { {one_for_one, 5, 10}, [BbServer]} }.
+    {ok, { {one_for_one, 5, 10}, []} }.
 

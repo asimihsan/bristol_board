@@ -1,4 +1,9 @@
--module(bristol_board_app).
+%% ---------------------------------------------------------------------
+%% @author Asim Ihsan <asim.ihsan@gmail.com>
+%% @copyright 2011 Asim Ihsan
+%% ---------------------------------------------------------------------
+
+-module(bb_core_app).
 
 -behaviour(application).
 
@@ -10,7 +15,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    bristol_board_sup:start_link().
+    bb_core_sup:start_link().
 
 stop(_State) ->
     ok.

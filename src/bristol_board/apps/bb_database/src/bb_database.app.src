@@ -1,0 +1,17 @@
+%% ---------------------------------------------------------------------
+%% @author Asim Ihsan <asim.ihsan@gmail.com>
+%% @copyright 2011 Asim Ihsan
+%% ---------------------------------------------------------------------
+
+{application, bb_database,
+ [
+  {description, "Database layer for Bristol Board."},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { bb_database_app, []}},
+  {env, []}
+ ]}.

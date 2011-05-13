@@ -1,0 +1,20 @@
+%% ---------------------------------------------------------------------
+%% @author Asim Ihsan <asim.ihsan@gmail.com>
+%% @copyright 2011 Asim Ihsan
+%% ---------------------------------------------------------------------
+
+{application, bb_core,
+  [
+    {description, "Application layer for Bristol Board."},
+    {vsn, "0.0.1"},
+    {registered, []},
+    {applications,
+      [
+        kernel,
+        stdlib
+      ]
+    },
+    {mod, {bb_core_app, []}},
+    {env, []}
+  ]
+}.
