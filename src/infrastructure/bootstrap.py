@@ -92,7 +92,7 @@ def install_bare_essentials():
               use_sudo = True)    
     sudo("apt-get update")
     sudo("yes yes | apt-get upgrade")
-    sudo("yes yes | apt-get install git mercurial build-essential unzip python-software-properties ruby curl python-dev htop")
+    sudo("yes yes | apt-get install git mercurial build-essential unzip python-software-properties ruby curl python-dev htop vim vim-nox")
 
 def setup_timezone():
     logger = logging.getLogger("%s.setup_timezone" % (APP_NAME, ))
@@ -122,7 +122,7 @@ def install_postgresql():
     logger.debug("entry.")
     sudo(r"add-apt-repository ppa:pitti/postgresql")
     sudo("apt-get update")
-    sudo("yes yes | apt-get install postgresql-9.0 libpq-dev")    
+    sudo("yes yes | apt-get install postgresql-9.0 libpq-dev postgresql-contrib-9.0")    
     sudo("easy_install -U psycopg2")        
     sudo("rm -rf /tmp/tmp*")
     
@@ -143,7 +143,11 @@ def init_postgresql():
     sudo("service postgresql start", user="postgres")    
     
     sudo("createuser -s ubuntu", user="postgres")
-    sudo("createdb database", user="postgres")
+    sudo("createdb database", user="postgres")    
+    sudo("psql -d database -f /usr/share/postgresql/9.0/contrib/adminpack.sql")
+    sudo("psql -d database -f /usr/share/postgresql/9.0/contrib/hstore.sql")
+    sudo("psql -d database -f /usr/share/postgresql/9.0/contrib/pgcrypto.sql")
+    sudo("psql -d database -f /usr/share/postgresql/9.0/contrib/uuid-ossp.sql")
     # sudo("psql -d template1 -c 'ALTER USER postgres WITH PASSWORD 'password';'", user="postgres")    
     
 def setup_postgresql():
