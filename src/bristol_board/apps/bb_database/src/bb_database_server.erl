@@ -64,7 +64,7 @@ init(_) ->
   
   %% AI interesting, fails in timeout rather than immediately when we
   %% exhaust the pool.  suggests we need to retry operations.
-  {ok, C5} = get_connection(?pgpool_name),
+  %% {ok, C5} = get_connection(?pgpool_name),
   {ok, #state{pgsql_pool = P}}.
 
 handle_call(_Request, _From, State) ->
