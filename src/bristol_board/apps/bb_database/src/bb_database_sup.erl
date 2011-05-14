@@ -28,5 +28,7 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
+    Server = ?CHILD(bb_database_server, worker),
+    Processes = [Server],
+    {ok, { {one_for_one, 5, 10}, Processes} }.
 
