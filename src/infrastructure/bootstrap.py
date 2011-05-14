@@ -1,7 +1,5 @@
 # ----------------------------------------------------------------------
 # Copyright (c) 2011 Asim Ihsan (asim dot ihsan at gmail dot com)
-# Distributed under the MIT/X11 software license, see 
-# http://www.opensource.org/licenses/mit-license.php.
 # ----------------------------------------------------------------------
 
 # ----------------------------------------------------------------------
@@ -144,10 +142,10 @@ def init_postgresql():
     
     sudo("createuser -s ubuntu", user="postgres")
     sudo("createdb database", user="postgres")    
-    sudo("psql -d database -f /usr/share/postgresql/9.0/contrib/adminpack.sql")
-    sudo("psql -d database -f /usr/share/postgresql/9.0/contrib/hstore.sql")
-    sudo("psql -d database -f /usr/share/postgresql/9.0/contrib/pgcrypto.sql")
-    sudo("psql -d database -f /usr/share/postgresql/9.0/contrib/uuid-ossp.sql")
+    run("psql -d database -f /usr/share/postgresql/9.0/contrib/adminpack.sql")
+    run("psql -d database -f /usr/share/postgresql/9.0/contrib/hstore.sql")
+    run("psql -d database -f /usr/share/postgresql/9.0/contrib/pgcrypto.sql")
+    run("psql -d database -f /usr/share/postgresql/9.0/contrib/uuid-ossp.sql")
     # sudo("psql -d template1 -c 'ALTER USER postgres WITH PASSWORD 'password';'", user="postgres")    
     
 def setup_postgresql():
@@ -259,18 +257,18 @@ def main():
     #   but safe, albeit wasteful, to run again.
     # ------------------------------------------------------------------
     functions_to_call = [ \
-                         setup_timezone,
-                         install_bare_essentials,
-                         install_erlang,
-                         install_haproxy,
-                         setup_python,
-                         setup_ntp,
-                         harden,
-                         install_postgresql,
+                         #setup_timezone,
+                         #install_bare_essentials,
+                         #install_erlang,
+                         #install_haproxy,
+                         #setup_python,
+                         #setup_ntp,
+                         #harden,
+                         #install_postgresql,
                          init_postgresql,
                          setup_postgresql,
-                         checkout_code,
-                         setup_bash_profile,
+                         #checkout_code,
+                         #setup_bash_profile,
                         ]
     # ------------------------------------------------------------------
     logger.info("executing the following functions:\n%s" % (pprint.pformat(functions_to_call), ))
