@@ -1,6 +1,6 @@
 src/bristol_board/ebin
 src/bristol_board/priv
-src/bristol_board/deps
+src/bristol_board/deps/*/ebin
 src/bristol_board/apps/*/ebin
 erl_crash.dump
 
