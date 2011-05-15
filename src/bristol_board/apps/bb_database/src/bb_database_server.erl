@@ -9,26 +9,24 @@
 -behaviour(gen_server).
 
 %% ------------------------------------------------------------------
-%% Defines.
+%% Includes.
 %% ------------------------------------------------------------------
--define(SERVER, ?MODULE).
--define(host, "localhost").
--define(port, 5432).
--define(username, "ubuntu").
--define(password, "password").
--define(database, "database").
--define(pool_size, 4).
--define(pgpool_name, postgresql_pool).
+-include("../include/bb_database_include.hrl").
 
 %% ------------------------------------------------------------------
 %% Records.
 %% ------------------------------------------------------------------
--record(state, {pgsql_pool}).
+-record(state, {}).
 
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
--export([start_link/0]).
+-export([start_link/0,
+        is_api_key_present/1,
+        is_api_key_valid/1,
+        is_user_valid/2,
+        
+        query_username_password/4]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -44,54 +42,75 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+is_api_key_present(ApiKey) ->
+    gen_server:call(?MODULE, {is_api_key_present, ApiKey}).
+is_api_key_valid(ApiKey) ->
+    gen_server:call(?MODULE, {is_api_key_valid, ApiKey}).
+is_user_valid(Username, Password) ->
+    gen_server:call(?MODULE, {is_user_valid, Username, Password}, ?DB_TIMEOUT).
+	  
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
-init(_) ->
-  {ok, P} = pgsql_pool:start_link(?pgpool_name,
-                                  ?pool_size,
-                                  [{host, ?host},
-                                   {port, ?port},
-                                   {username, ?username},
-                                   {password, ?password},
-                                   {database, ?database}]),
-  {ok, C1} = get_connection(?pgpool_name),
-  {ok, C2} = get_connection(?pgpool_name),
-  {ok, C3} = get_connection(?pgpool_name),
-  {ok, C4} = get_connection(?pgpool_name),
-  
-  %% AI interesting, fails in timeout rather than immediately when we
-  %% exhaust the pool.  suggests we need to retry operations.
-  %% {ok, C5} = get_connection(?pgpool_name),
-  {ok, #state{pgsql_pool = P}}.
+init(_Args) ->
+    {ok, #state{}}.
 
+handle_call({is_user_valid, Username, Password}, From, State) ->    
+    bb_database_event:is_user_valid_call(Username, Password),   
+    proc_lib:spawn(?MODULE, query_username_password, [From, ?pgpool_auth_name, Username, Password]),
+    {noreply, State};
+    
 handle_call(_Request, _From, State) ->
-  {noreply, ok, State}.
+    {noreply, State}.
 
 handle_cast(_Msg, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 handle_info(_Info, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 terminate(_Reason, State) ->
-  P = State#state.pgsql_pool,
-  pgsql_pool:stop(P),
-  ok.
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+    {ok, State}.
 
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
-
+query_username_password(From, Pool, Username, Password) ->
+    Result = q(Pool, "SELECT true FROM articheck_user WHERE username = $1 AND password = crypt($2, password)", [Username, Password]),        
+    case Result of
+        [{true}] ->
+            bb_database_event:is_user_valid_return(Username, Password, true),   
+            gen_server:reply(From, true);
+        _ ->
+            bb_database_event:is_user_valid_return(Username, Password, false),   
+            gen_server:reply(From, false)
+    end.        
+   
+q(P, Sql, Parameters) ->
+    case get_connection(P) of
+        {ok, C} ->
+            try
+                case pgsql:equery(C, Sql, Parameters) of
+                    {ok, _Cols, Rows} -> Rows;
+                    {ok, Rows} -> Rows
+                end
+            after
+                return_connection(P, C)
+            end
+    end.
+    
 get_connection(P) ->
     case pgsql_pool:get_connection(P, 1000) of
         {ok, C} ->            
             {ok, C};
         Error -> 
             Error
-    end.
+    end.    
+
+return_connection(P, C) ->
+    pgsql_pool:return_connection(P, C).

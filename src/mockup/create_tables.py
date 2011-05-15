@@ -66,7 +66,8 @@ CREATE_INSTITUTION_TABLE = """CREATE TABLE institution (institution_id UUID PRIM
 # role
 DROP_ROLE_TABLE = """DROP TABLE IF EXISTS role;"""
 CREATE_ROLE_TABLE = """CREATE TABLE role (role_id UUID PRIMARY KEY,
-                                          privileges HSTORE NOT NULL,
+                                          role_name TEXT NOT NULL,
+                                          privileges HSTORE,
                                           obligations HSTORE);"""
 
 # printout
@@ -156,12 +157,14 @@ INDEX_CONDITION_REPORT_ID_ON_PHOTOGRAPH = """CREATE INDEX condition_report_id_on
 INDEX_REVISION_ID_ON_PRINTOUT = """CREATE INDEX revision_id_on_printout on printout(revision_id);"""
 INDEX_PHOTOGRAPH_ID_ON_ANNOTATION = """CREATE INDEX photograph_id_on_annotation on annotation(photograph_id);"""
 INDEX_API_KEY_ON_INSTITUTION = """CREATE INDEX api_key_on_institution on institution(api_key);"""
+INDEX_USERNAME_ON_ARTICHECK_USER = """CREATE INDEX username_on_articheck_user on articheck_user(username);"""
 
 INDEX_STATEMENTS = [INDEX_CONDITION_REPORT_ID_ON_CONDITION_REPORT,
                     INDEX_CONDITION_REPORT_ID_ON_PHOTOGRAPH,
                     INDEX_REVISION_ID_ON_PRINTOUT,
                     INDEX_PHOTOGRAPH_ID_ON_ANNOTATION,
-                    INDEX_API_KEY_ON_INSTITUTION]
+                    INDEX_API_KEY_ON_INSTITUTION,
+                    INDEX_USERNAME_ON_ARTICHECK_USER]
 # ----------------------------------------------------------------------
 
 # ----------------------------------------------------------------------
@@ -176,21 +179,51 @@ ALL_STATEMENTS = INSERT_STATEMENTS + INDEX_STATEMENTS + FOREIGN_KEY_STATEMENTS
 # insert_dummy_data() commands.
 # ----------------------------------------------------------------------
 INSERT_INSTITUTION = "INSERT INTO institution (institution_id, name, api_key, api_key_expiry) VALUES (%s, %s, %s, %s);"
+RANDOM_INSTITUTION = "SELECT institution_id FROM institution ORDER BY RANDOM() LIMIT 1;"
+
+INSERT_ROLE = "INSERT INTO role (role_id, role_name) VALUES (%s, %s);"
+SELECT_CONSERVATOR = "SELECT role_id FROM role WHERE role_name = 'conservator';"
+
+INSERT_USER = "INSERT INTO articheck_user (user_id, institution_id, username, password, role_id, email_address) VALUES (%s, %s, %s, crypt(%s, gen_salt('bf', 8)), %s, %s);"
 # ----------------------------------------------------------------------
 def insert_dummy_data(cur):
     logger = logging.getLogger("%s.insert_dummy_data" % (APP_NAME, ))
     logger.info("entry")
     
+    NUMBER_INSTITUTIONS = 5
+    NUMBER_USERS = 5
+    
     logger.info("Inserting institutions...")
-    for i in xrange(5):
+    for i in xrange(NUMBER_INSTITUTIONS):
         institution_id = uuid.uuid4()
         name = "Institution %s" % (i, )
         institution_id = str(uuid.uuid4())
         api_key = str(uuid.uuid4())
         api_key_expiry = (datetime.datetime.now() + datetime.timedelta(days=365)).replace(microsecond=0).isoformat(" ")
         args = (institution_id, name, api_key, api_key_expiry)
-        logger.debug("args:\n%s" % (pprint.pformat(args), ))
+        logger.debug("institution insert args:\n%s" % (pprint.pformat(args), ))
         cur.execute(INSERT_INSTITUTION, args)
+    
+    logger.info("Inserting roles...")
+    cur.execute(INSERT_ROLE, (str(uuid.uuid4()), "registrar"))
+    cur.execute(INSERT_ROLE, (str(uuid.uuid4()), "conservator"))
+    
+    logger.info("Inserting users...")    
+    for i in xrange(NUMBER_USERS):        
+        cur.execute(RANDOM_INSTITUTION)        
+        institution_id = cur.fetchone()[0]
+        
+        cur.execute(SELECT_CONSERVATOR)
+        role_id = cur.fetchone()[0]
+        
+        user_id = str(uuid.uuid4())
+        username = "user%s" % (i, )
+        password = "pass%s" % (i, )
+        email_address = "user@host.com"
+        
+        args = (user_id, institution_id, username, password, role_id, email_address)
+        logger.debug("user insert args:\n%s" % (pprint.pformat(args), ))
+        cur.execute(INSERT_USER, args)        
 
 if __name__ == "__main__":
     logger.info("Starting main.  args: %s" % (sys.argv[1:], ))

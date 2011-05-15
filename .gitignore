@@ -3,4 +3,6 @@ src/bristol_board/priv
 src/bristol_board/deps/*/ebin
 src/bristol_board/apps/*/ebin
 erl_crash.dump
+*.beam
+
 
