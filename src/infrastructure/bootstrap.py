@@ -34,11 +34,12 @@ import sys
 import logging
 import collections
 import pprint
+from glob import glob
 
 from boto.ec2.connection import EC2Connection
 from fabric.api import settings
 from fabric.contrib.console import confirm
-from fabric.operations import sudo, run
+from fabric.operations import sudo, run, put
 from fabric.contrib.files import append, uncomment, sed, exists
 from fabric.context_managers import cd, path
 import fabric.network
@@ -146,7 +147,8 @@ def init_postgresql():
     run("psql -d database -f /usr/share/postgresql/9.0/contrib/hstore.sql")
     run("psql -d database -f /usr/share/postgresql/9.0/contrib/pgcrypto.sql")
     run("psql -d database -f /usr/share/postgresql/9.0/contrib/uuid-ossp.sql")
-    # sudo("psql -d template1 -c 'ALTER USER postgres WITH PASSWORD 'password';'", user="postgres")    
+    run("psql -d template1 -c \"ALTER USER postgres WITH PASSWORD 'password';\"")    
+    run("psql -d template1 -c \"ALTER USER ubuntu WITH PASSWORD 'password';\"")    
     
 def setup_postgresql():
     logger = logging.getLogger("%s.setup_postgresql" % (APP_NAME, ))
@@ -206,7 +208,9 @@ def harden():
     sudo("yes yes | apt-get install ufw")
     sudo("ufw allow ssh")
     sudo("ufw allow 80/tcp")
+    sudo("iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080")
     sudo("ufw allow 443/tcp")
+    sudo("iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443")
     sudo("ufw default deny")
     sudo("ufw limit OpenSSH")
     sudo("yes yes | ufw enable")
@@ -230,6 +234,45 @@ def setup_bash_profile():
     sudo("rm -f ~/.bash_profile")
     append(filename = "~/.bash_profile",
            text = "export PATH=${PATH}:/usr/lib/postgresql/9.0/bin")         
+           
+def setup_ssl():
+    """ This isn't 100% unattended.  You'll need to type in 'password' at all
+    the prompts.  However, the final SSL certificates will not be password
+    protected.
+    
+    ~/myCA : contains CA certificate, certificates database, generated certificates, keys, and requests
+    ~/myCA/signedcerts : contains copies of each signed certificate
+    ~/myCA/private : contains the private key 
+    """
+    logger = logging.getLogger("%s.setup_ssl" % (APP_NAME, ))
+    logger.debug("entry.")               
+    
+    # ------------------------------------------------------------------------
+    #   Validate assumptions.
+    # ------------------------------------------------------------------------
+    assert(os.path.isfile("exampleserver.cnf"))
+    assert(os.path.isfile("caconfig.cnf"))    
+    # ------------------------------------------------------------------------
+    
+    sudo("yes yes | apt-get install libssl0.9.8 ca-certificates")
+    with cd("~"):
+        run("mkdir -p myCA/signedcerts")
+        run("mkdir -p myCA/private")
+    for filename in glob("*.cnf"):
+        put(filename, os.path.join("/home/ubuntu/myCA/", filename))
+
+    with cd("~/myCA"):
+        run("echo '01' > serial")
+        run("touch index.txt")        
+        
+        run("export OPENSSL_CONF=~/myCA/caconfig.cnf; openssl req -x509 -newkey rsa:2048 -out cacert.pem -outform PEM -days 1825")
+        run("openssl x509 -in cacert.pem -out cacert.crt")        
+        
+        run("export OPENSSL_CONF=~/myCA/exampleserver.cnf; openssl req -newkey rsa:2048 -keyout tempkey.pem -keyform PEM -out tempreq.pem -outform PEM")
+        run("openssl rsa < tempkey.pem > server_key.pem")
+        
+        run("export OPENSSL_CONF=~/myCA/caconfig.cnf; openssl ca -in tempreq.pem -out server_crt.pem")
+        run("rm -f tempkey.pem && rm -f tempreq.pem")        
     
 def call_fabric_function(function, remote_host, *args, **kwds):
     if KEY_FILENAME is not None:
@@ -263,12 +306,13 @@ def main():
                          #install_haproxy,
                          #setup_python,
                          #setup_ntp,
-                         #harden,
+                         harden,
                          #install_postgresql,
-                         init_postgresql,
-                         setup_postgresql,
+                         #init_postgresql,
+                         #setup_postgresql,
                          #checkout_code,
                          #setup_bash_profile,
+                         #setup_ssl
                         ]
     # ------------------------------------------------------------------
     logger.info("executing the following functions:\n%s" % (pprint.pformat(functions_to_call), ))

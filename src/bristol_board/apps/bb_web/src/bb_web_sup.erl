@@ -49,12 +49,29 @@ init([]) ->
                           "..", "priv", "dispatch.conf"])),
     Port = case os:getenv("WEB_PORT") of false -> "8080"; Any2 -> Any2 end,
     WebConfig = [
-                 {ip, Ip},
-                 {port, Port},
-                 {log_dir, "priv/log"},
-                 {dispatch, Dispatch}],
+        {name, one}
+        {ip, Ip},
+        {port, Port},
+        {log_dir, "priv/log"},
+        {dispatch, Dispatch}],
     Web = {webmachine_mochiweb,
            {webmachine_mochiweb, start, [WebConfig]},
            permanent, 5000, worker, dynamic},
-    Processes = [Web],
+    
+    Port2 = case os:getenv("WEB_SSL_PORT") of false -> "8443"; Any2 -> Any2 end,    
+    WebSSLConfig = [
+        {name, two},
+        {ip, Ip},
+        {port, Port2},
+        {ssl, true},
+        {ssl_opts, [{certfile,   "/home/ubuntu/myCA/server_crt.pem"},
+                   {cacertfile, "/home/ubuntu/myCA/cacert.pem"},
+                   {keyfile,    "/home/ubuntu/myCA/server_key.pem"}]},
+        {log_dir, "priv/log"},
+        {dispatch, Dispatch}],
+    WebSSL = {two,
+          {webmachine_mochiweb, start, [WebSSLConfig]},
+          permanent, 5000, worker, dynamic},
+    Processes = [Web, WebSSL],           
+
     {ok, { {one_for_one, 10, 10}, Processes} }.
