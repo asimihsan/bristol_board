@@ -209,8 +209,10 @@ def harden():
     sudo("ufw allow ssh")
     sudo("ufw allow 80/tcp")
     sudo("iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080")
+    sudo("ufw allow 8080/tcp")
     sudo("ufw allow 443/tcp")
     sudo("iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443")
+    sudo("ufw allow 8443/tcp")
     sudo("ufw default deny")
     sudo("ufw limit OpenSSH")
     sudo("yes yes | ufw enable")
@@ -256,6 +258,7 @@ def setup_ssl():
     
     sudo("yes yes | apt-get install libssl0.9.8 ca-certificates")
     with cd("~"):
+        run("rm -rf ~/myCA")
         run("mkdir -p myCA/signedcerts")
         run("mkdir -p myCA/private")
     for filename in glob("*.cnf"):
@@ -272,7 +275,11 @@ def setup_ssl():
         run("openssl rsa < tempkey.pem > server_key.pem")
         
         run("export OPENSSL_CONF=~/myCA/caconfig.cnf; openssl ca -in tempreq.pem -out server_crt.pem")
-        run("rm -f tempkey.pem && rm -f tempreq.pem")        
+        run("rm -f tempkey.pem && rm -f tempreq.pem")
+
+        run("openssl x509 -in cacert.pem -out cacert.crt")
+        run("openssl x509 -in server_crt.pem -out server_crt.crt")
+        #run("openssl x509 -in server_key.pem -out server_key.crt")
     
 def call_fabric_function(function, remote_host, *args, **kwds):
     if KEY_FILENAME is not None:
