@@ -23,11 +23,11 @@ delete_handler() ->
 init([]) ->
     {ok, #state{}}.
 
-handle_event({is_user_valid_call, {Username, Password}}, State) ->
-    error_logger:info_msg("bb_database::is_user_valid(~p, ~p) call~n", [Username, Password]),
+handle_event({is_user_password_valid_call, {Username, Password}}, State) ->
+    error_logger:info_msg("bb_database::is_user_password_valid(~p, ~p) call~n", [Username, Password]),
     {ok, State};
-handle_event({is_user_valid_return, {Username, Password, Return}}, State) ->
-    error_logger:info_msg("bb_database::is_user_valid(~p, ~p) return: ~p~n", [Username, Password, Return]),
+handle_event({is_user_password_valid_return, {Username, Password, Return}}, State) ->
+    error_logger:info_msg("bb_database::is_user_password_valid(~p, ~p) return: ~p~n", [Username, Password, Return]),
     {ok, State}.    
 
 handle_call(_Request, State) ->

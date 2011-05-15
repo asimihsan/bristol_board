@@ -14,6 +14,6 @@ init() ->
     bb_database_event_logger:add_handler().
 
 test1(Username, Password) ->        
-    bb_database_server:is_user_valid(Username, Password).
+    bb_database_server:is_user_password_valid(Username, Password).
     
     

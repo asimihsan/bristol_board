@@ -8,8 +8,8 @@
 -export([start_link/0,
         add_handler/2,
         delete_handler/2,
-        is_user_valid_call/2,
-        is_user_valid_return/3]).
+        is_user_password_valid_call/2,
+        is_user_password_valid_return/3]).
 
 -define(SERVER, ?MODULE).
 
@@ -22,7 +22,7 @@ add_handler(Handler, Args) ->
 delete_handler(Handler, Args) ->
     gen_event:delete_handler(?SERVER, Handler, Args).
 
-is_user_valid_call(Username, Password) ->
-    gen_event:notify(?SERVER, {is_user_valid_call, {Username, Password}}).
-is_user_valid_return(Username, Password, Return) ->
-    gen_event:notify(?SERVER, {is_user_valid_return, {Username, Password, Return}}).    
+is_user_password_valid_call(Username, Password) ->
+    gen_event:notify(?SERVER, {is_user_password_valid_call, {Username, Password}}).
+is_user_password_valid_return(Username, Password, Return) ->
+    gen_event:notify(?SERVER, {is_user_password_valid_return, {Username, Password, Return}}).    

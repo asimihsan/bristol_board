@@ -24,9 +24,9 @@
 -export([start_link/0,
         is_api_key_present/1,
         is_api_key_valid/1,        
-        is_user_valid/2,
+        is_user_password_valid/2,
         
-        query_is_user_valid/4]).
+        query_is_user_password_valid/4]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -48,8 +48,8 @@ is_api_key_present(ApiKey) ->
     gen_server:call(?MODULE, {is_api_key_present, ApiKey}).
 is_api_key_valid(ApiKey) ->
     gen_server:call(?MODULE, {is_api_key_valid, ApiKey}).
-is_user_valid(Username, Password) ->
-    gen_server:call(?MODULE, {is_user_valid, Username, Password}, ?DB_TIMEOUT).
+is_user_password_valid(Username, Password) ->
+    gen_server:call(?MODULE, {is_user_password_valid, Username, Password}, ?DB_TIMEOUT).
 	  
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -58,8 +58,8 @@ init(_Args) ->
     {ok, #state{}}.
 
 handle_call({is_user_valid, Username, Password}, From, State) ->    
-    bb_database_event:is_user_valid_call(Username, Password),   
-    proc_lib:spawn(?MODULE, query_is_user_valid, [From, ?pgpool_auth_name, Username, Password]),
+    bb_database_event:is_user_password_valid(Username, Password),   
+    proc_lib:spawn(?MODULE, query_is_user_password_valid, [From, ?pgpool_auth_name, Username, Password]),
     {noreply, State};
     
 handle_call(_Request, _From, State) ->
@@ -71,7 +71,7 @@ handle_cast(_Msg, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, State) ->
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -80,14 +80,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 %% Queries.
 %% ------------------------------------------------------------------    
-query_is_user_valid(From, Pool, Username, Password) ->
+query_is_user_password_valid(From, Pool, Username, Password) ->
     Result = q(Pool, "SELECT true FROM articheck_user WHERE username = $1 AND password = crypt($2, password)", [Username, Password]),        
     case Result of
         [{true}] ->
-            bb_database_event:is_user_valid_return(Username, Password, true),   
+            bb_database_event:is_user_password_valid_return(Username, Password, {ok, true}),   
             gen_server:reply(From, {ok, true});
         _ ->
-            bb_database_event:is_user_valid_return(Username, Password, false),   
+            bb_database_event:is_user_password_valid_return(Username, Password, {ok, false}),   
             gen_server:reply(From, {ok, false})
     end.        
     
