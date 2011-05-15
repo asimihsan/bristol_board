@@ -7,6 +7,11 @@
 
 -behaviour(supervisor).
 
+%% ------------------------------------------------------------------
+%% Includes.
+%% ------------------------------------------------------------------
+-include("../include/bb_database_include.hrl").
+
 %% API
 -export([start_link/0]).
 
@@ -29,6 +34,24 @@ start_link() ->
 
 init([]) ->
     Server = ?CHILD(bb_database_server, worker),
-    Processes = [Server],
-    {ok, { {one_for_one, 5, 10}, Processes} }.
-
+    
+    DbOpts = [{host, ?host},
+              {port, ?port},
+              {username, ?username},
+              {password, ?password},
+              {database, ?database}],
+    PgPoolAuth = {?pgpool_auth_name,
+                 {pgsql_pool, start_link, [?pgpool_auth_name,
+                                        ?pgpool_auth_size,
+                                        DbOpts]},
+                permanent, 5000, worker, dynamic},    
+    PgPoolOps = {?pgpool_ops_name,
+                 {pgsql_pool, start_link, [?pgpool_ops_name,
+                                        ?pgpool_ops_size,
+                                        DbOpts]},
+                permanent, 5000, worker, dynamic},                
+    EventManager = ?CHILD(bb_database_event, worker),
+                
+    Processes = [Server, PgPoolAuth, PgPoolOps, EventManager],
+    RestartStrategy = {one_for_one, 5, 10},
+    {ok, {RestartStrategy, Processes} }.
