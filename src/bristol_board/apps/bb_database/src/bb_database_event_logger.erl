@@ -28,7 +28,10 @@ handle_event({is_user_password_valid_call, {Username, Password}}, State) ->
     {ok, State};
 handle_event({is_user_password_valid_return, {Username, Password, Return}}, State) ->
     error_logger:info_msg("bb_database::is_user_password_valid(~p, ~p) return: ~p~n", [Username, Password, Return]),
-    {ok, State}.    
+    {ok, State};
+handle_event({create_condition_report, {call, Username, Content}}, State) ->
+    error_logger:info_msg("bb_database::create_condition_report(~p, ~p)~n", [Username, Content]),
+    {ok, State}.        
 
 handle_call(_Request, State) ->
     Reply = ok,

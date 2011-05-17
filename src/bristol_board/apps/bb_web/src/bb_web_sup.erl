@@ -43,6 +43,9 @@ upgrade() ->
 %% @spec init([]) -> SupervisorTree
 %% @doc supervisor callback.
 init([]) ->
+    %% debug
+    wmtrace_resource:add_dispatch_rule("wmtrace", "/tmp"),
+
     Ip = case os:getenv("WEB_IP") of false -> "0.0.0.0"; Any -> Any end,
     {ok, Dispatch} = file:consult(filename:join(
                          [filename:dirname(code:which(?MODULE)),

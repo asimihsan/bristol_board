@@ -97,12 +97,9 @@ CREATE_ANNOTATION_TABLE = """CREATE TABLE annotation (annotation_id UUID PRIMARY
 DROP_CONDITION_REPORT_TABLE = """DROP TABLE IF EXISTS condition_report;"""
 CREATE_CONDITION_REPORT_TABLE = """CREATE TABLE condition_report (revision_id UUID PRIMARY KEY,
                                                                   condition_report_id UUID NOT NULL,
-                                                                  art_id UUID NOT NULL,
                                                                   user_id UUID NOT NULL,
                                                                   datetime_edited TIMESTAMP NOT NULL,
-                                                                  contents TEXT NOT NULL,
-                                                                  tags HSTORE,
-                                                                  template_id UUID NOT NULL);"""
+                                                                  contents TEXT NOT NULL);"""
 
 # note
 DROP_NOTE_TABLE = """DROP TABLE IF EXISTS note;"""

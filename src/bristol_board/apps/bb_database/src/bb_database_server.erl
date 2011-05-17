@@ -19,18 +19,6 @@
 -record(state, {}).
 
 %% ------------------------------------------------------------------
-%% API Function Exports
-%% ------------------------------------------------------------------
--export([start_link/0,
-        is_api_key_present/1,
-        is_api_key_valid/1,        
-        is_user_password_valid/2,
-        sleep/0,
-        
-        query_sleep/2,
-        query_is_user_password_valid/4]).
-
-%% ------------------------------------------------------------------
 %% gen_server Function Exports
 %% ------------------------------------------------------------------
 -export([init/1,
@@ -39,6 +27,24 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+
+%% ------------------------------------------------------------------
+%% User interface exports.  For use externally.
+%% ------------------------------------------------------------------
+-export([start_link/0,
+        is_api_key_present/1,
+        is_api_key_valid/1,        
+        is_user_password_valid/2,
+        sleep/0,
+        create_condition_report/2]).
+
+%% ------------------------------------------------------------------
+%% Exports only intended for internal use.  Required to permit
+%% spawn_link()-ing.
+%% ------------------------------------------------------------------
+-export([query_sleep/2,
+        query_is_user_password_valid/4,
+        query_create_condition_report/4]).
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -54,6 +60,8 @@ is_user_password_valid(Username, Password) ->
     gen_server:call(?MODULE, {is_user_password_valid, Username, Password}, ?DB_TIMEOUT).
 sleep() ->    
     gen_server:call(?MODULE, {sleep}, ?DB_TIMEOUT).    
+create_condition_report(Username, Contents) ->
+    gen_server:call(?MODULE, {create_condition_report, Username, Contents}, ?DB_TIMEOUT).
 	  
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -62,7 +70,7 @@ sleep() ->
 %% @doc Initiqlisation.  We trap exits and explicitly handle them in
 %% handle_info, so that we can no die on query timeouts.
 init(_Args) ->
-    process_flag(trap_exit, true),
+    process_flag(trap_exit, true),    
     {ok, #state{}}.
 
 handle_call({sleep}, From, State) ->     
@@ -73,6 +81,11 @@ handle_call({is_user_password_valid, Username, Password}, From, State) ->
     bb_database_event:is_user_password_valid_call(Username, Password),   
     proc_lib:spawn_link(?MODULE, query_is_user_password_valid, [From, ?pgpool_auth_name, Username, Password]),    
     {noreply, State};
+    
+handle_call({create_condition_report, Username, Contents}, From, State) -> 
+    bb_database_event:create_condition_report(call, Username, Contents),   
+    proc_lib:spawn_link(?MODULE, query_create_condition_report, [From, ?pgpool_ops_name, Username, Contents]),    
+    {noreply, State};    
     
 handle_call(Request, From, State) ->
     io:format("Unknown call. Request: ~p, From: ~p~n", [Request, From]),
@@ -111,25 +124,52 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% ------------------------------------------------------------------
-%% Queries.
+%% Queries.  These are any kind of database executions, regardless
+%% of whether they answer questions, alter data, etc.
 %% ------------------------------------------------------------------    
+
+%% @doc Cheeky function.  Just sleeps for 10 seconds, hence overruns
+%% the default gen_server timeout of 5000ms and triggers a
+%% timeout _on the caller_.  Interesting is that the process running
+%% this function will exit with a normal reason.
 query_sleep(_From, Pool) ->
     proc_lib:init_ack(ok),
     _Result = q(Pool, "SELECT pg_sleep(10);", []).    
 
+%% @doc Is the username and password combination valid?  Note the
+%% catch that we're using a PostgreSQL contrib module to provide
+%% native access to bcrypt password hashing.
+%%
+%% Reference: http://www.postgresql.org/docs/9.0/interactive/pgcrypto.html
 query_is_user_password_valid(From, Pool, Username, Password) ->    
     proc_lib:init_ack({query_pid, ok}),
     Result = q(Pool, "SELECT true FROM articheck_user WHERE username = $1 AND password = crypt($2, password)", [Username, Password]),        
     case Result of
         {ok, [{true}]} ->
             bb_database_event:is_user_password_valid_return(Username, Password, {ok, true}),   
-            gen_server:reply(From, {ok, true});
+            gen_server:reply(From, {return_query, ok, true});
         {ok, _} ->
             bb_database_event:is_user_password_valid_return(Username, Password, {ok, false}),   
-            gen_server:reply(From, {ok, false});
+            gen_server:reply(From, {return_query, ok, false});
         {error, Reason} ->
-            gen_server:reply(From, {error, Reason})
+            gen_server:reply(From, {return_query, error, Reason})
     end.        
+    
+query_create_condition_report(From, Pool, Username, Contents) ->    
+    proc_lib:init_ack({query_pid, ok}),
+    RUserId = q(Pool, "SELECT user_id FROM articheck_user WHERE username = $1", [Username]),        
+    case RUserId of
+        {ok, [{UserId}]} ->
+            RConditionReport = q(Pool, "INSERT INTO condition_report (revision_id, condition_report_id, user_id, datetime_edited, contents) VALUES (uuid_generate_v4(), uuid_generate_v4(), $1, now(), $2)", [UserId, Contents]),
+            case RConditionReport of
+                {error, Reason} ->
+                    gen_server:reply(From, {return_query, error, Reason});
+                _ ->
+                    gen_server:reply(From, {return_query, ok})
+            end;
+        {error, Reason} ->
+            gen_server:reply(From, {return_query, error, Reason})
+    end.            
     
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
