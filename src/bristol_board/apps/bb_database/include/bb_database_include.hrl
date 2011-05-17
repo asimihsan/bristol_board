@@ -7,7 +7,6 @@
 %% ---------------------------------------------------------------------
 %%	Config to connect to the PostgreSQL database.
 %% ---------------------------------------------------------------------
--define(SERVER, ?MODULE).
 -define(host, "localhost").
 -define(port, 5432).
 -define(username, "ubuntu").
