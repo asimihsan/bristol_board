@@ -36,7 +36,8 @@
         is_api_key_valid/1,        
         is_user_password_valid/2,
         sleep/0,
-        create_condition_report/2]).
+        create_condition_report/2,
+        get_condition_reports/2]).
 
 %% ------------------------------------------------------------------
 %% Exports only intended for internal use.  Required to permit
@@ -44,7 +45,8 @@
 %% ------------------------------------------------------------------
 -export([query_sleep/2,
         query_is_user_password_valid/4,
-        query_create_condition_report/4]).
+        query_create_condition_report/4,
+        query_get_condition_reports/4]).
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -62,6 +64,9 @@ sleep() ->
     gen_server:call(?MODULE, {sleep}, ?DB_TIMEOUT).    
 create_condition_report(Username, Contents) ->
     gen_server:call(?MODULE, {create_condition_report, Username, Contents}, ?DB_TIMEOUT).
+get_condition_reports(username, Username) ->
+    gen_server:call(?MODULE, {get_condition_reports, username, Username}, ?DB_TIMEOUT).    
+    
 	  
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -71,7 +76,9 @@ create_condition_report(Username, Contents) ->
 %% handle_info, so that we can no die on query timeouts.
 init(_Args) ->
     process_flag(trap_exit, true),    
-    {ok, #state{}}.
+    
+    %% The last 0 is a timeout that triggers a handle_info timeout call.
+    {ok, #state{}, 0}.
 
 handle_call({sleep}, From, State) ->     
     proc_lib:spawn_link(?MODULE, query_sleep, [From, ?pgpool_auth_name]),    
@@ -87,6 +94,11 @@ handle_call({create_condition_report, Username, Contents}, From, State) ->
     proc_lib:spawn_link(?MODULE, query_create_condition_report, [From, ?pgpool_ops_name, Username, Contents]),    
     {noreply, State};    
     
+handle_call({get_condition_reports, username, Username}, From, State) -> 
+    bb_database_event:get_condition_reports(call, username, Username),   
+    proc_lib:spawn_link(?MODULE, query_get_condition_reports, [From, ?pgpool_ops_name, username, Username]),    
+    {noreply, State};        
+    
 handle_call(Request, From, State) ->
     io:format("Unknown call. Request: ~p, From: ~p~n", [Request, From]),
     {noreply, State}.
@@ -98,7 +110,7 @@ handle_cast(Msg, State) ->
 %% @doc Handle exits from the processes we spawn_link to handle the
 %% database queries for us.
 handle_info({'EXIT', Pid, Reason}, State) ->
-    io:format("Query timeout. Pid: ~p, Reason: ~p~n", [Pid, Reason]),
+    io:format("Query stops. Pid: ~p, Reason: ~p~n", [Pid, Reason]),
     {noreply, State};
 
 %% @doc Receive callbacks from proc_lib:init_ack() calls from
@@ -106,12 +118,17 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 %%
 %% proc_lib:init_ack() returns {ack, Pid(), <return value>}
 %% where <return valud> is Returncode
-handle_info({ack, QueryPid, ok}, State) ->
+handle_info({ack, QueryPid, {query_pid, ok}}, State) ->
     io:format("ok ack. QueryPid: ~p~n", [QueryPid]),
     {noreply, State}; 
 handle_info({ack, QueryPid, ReturnCode}, State) ->
     io:format("bad ack. QueryPid: ~p, ReturnCode: ~p~n", [QueryPid, ReturnCode]),
     {noreply, State};        
+
+%% @doc Result of the 0 timeout init call.  Set up the event logger.
+handle_info(timeout, State) ->
+    bb_database_event_logger:add_handler(),
+    {noreply, State};
     
 handle_info(Info, State) ->
     io:format("Unknown info. Info: ~p~n", [Info]),
@@ -152,6 +169,7 @@ query_is_user_password_valid(From, Pool, Username, Password) ->
             bb_database_event:is_user_password_valid_return(Username, Password, {ok, false}),   
             gen_server:reply(From, {return_query, ok, false});
         {error, Reason} ->
+            bb_database_event:is_user_password_valid_return(Username, Password, {error, Reason}),   
             gen_server:reply(From, {return_query, error, Reason})
     end.        
     
@@ -160,7 +178,11 @@ query_create_condition_report(From, Pool, Username, Contents) ->
     RUserId = q(Pool, "SELECT user_id FROM articheck_user WHERE username = $1", [Username]),        
     case RUserId of
         {ok, [{UserId}]} ->
-            RConditionReport = q(Pool, "INSERT INTO condition_report (revision_id, condition_report_id, user_id, datetime_edited, contents) VALUES (uuid_generate_v4(), uuid_generate_v4(), $1, now(), $2)", [UserId, Contents]),
+            RConditionReport = q(Pool, "INSERT INTO condition_report "
+                                    "(revision_id, condition_report_id, user_id, "
+                                    "datetime_edited, contents) VALUES "
+                                    "(uuid_generate_v4(), uuid_generate_v4(), $1, "
+                                    "now(), $2)", [UserId, Contents]),
             case RConditionReport of
                 {error, Reason} ->
                     gen_server:reply(From, {return_query, error, Reason});
@@ -170,6 +192,31 @@ query_create_condition_report(From, Pool, Username, Contents) ->
         {error, Reason} ->
             gen_server:reply(From, {return_query, error, Reason})
     end.            
+    
+query_get_condition_reports(From, Pool, username, Username) ->    
+    proc_lib:init_ack({query_pid, ok}),
+    
+    RQuery = q(Pool, "SELECT C.revision_id, C.condition_report_id, C.datetime_edited, C.user_id
+                       FROM condition_report as C
+                           JOIN (
+                                SELECT C1.condition_report_id, MAX(datetime_edited) AS datetime_edited
+                                FROM condition_report as C1
+                                GROUP BY C1.condition_report_id
+                                ) AS LastRevision
+                            ON LastRevision.condition_report_id = C.condition_report_id
+                            JOIN (
+                                SELECT C2.condition_report_id
+                                FROM condition_report AS C2
+                                WHERE C2.user_id = (SELECT user_id FROM articheck_user WHERE username = $1)
+                                GROUP BY C2.condition_report_id
+                            ) AS UserCRs
+                            ON UserCRs.condition_report_id = C.condition_report_id", [Username]),        
+    case RQuery of
+        {ok, Rows} ->
+            gen_server:reply(From, {return_query, ok, Rows});
+        {error, Reason} ->
+            gen_server:reply(From, {return_query, error, Reason})
+    end.                
     
 %% ------------------------------------------------------------------
 %% Internal Function Definitions

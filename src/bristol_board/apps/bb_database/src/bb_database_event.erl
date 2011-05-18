@@ -10,7 +10,8 @@
         delete_handler/2,
         is_user_password_valid_call/2,
         is_user_password_valid_return/3,
-        create_condition_report/3]).
+        create_condition_report/3,
+        get_condition_reports/3]).
 
 start_link() ->
     gen_event:start_link({local, ?MODULE}).
@@ -28,3 +29,6 @@ is_user_password_valid_return(Username, Password, Return) ->
     
 create_condition_report(call, Username, Content) ->
     gen_event:notify(?MODULE, {create_condition_report, {call, Username, Content}}).
+    
+get_condition_reports(call, username, Username) ->
+    gen_event:notify(?MODULE, {get_condition_reports, {call, username, Username}}).
