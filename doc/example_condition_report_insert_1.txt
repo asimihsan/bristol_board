@@ -1,0 +1,1 @@
+insert into condition_report (revision_id, condition_report_id, user_id, datetime_edited, contents) values (uuid_generate_v4(), '1fdf038b7b6149d789410fb3febe5f77', 'fffffbc417b34ef99b14b10eaa8e9313', '2011-05-21 01:01:01', '{"type": "painting", "title": "blue blue blue"}');

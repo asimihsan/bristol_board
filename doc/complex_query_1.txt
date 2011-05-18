@@ -1,0 +1,15 @@
+SELECT C.revision_id, C.condition_report_id, C.datetime_edited, C.user_id
+FROM condition_report as C
+    JOIN (
+        SELECT C1.condition_report_id, MAX(datetime_edited) AS datetime_edited
+        FROM condition_report as C1
+        GROUP BY C1.condition_report_id
+        ) AS LastRevision
+    ON LastRevision.condition_report_id = C.condition_report_id
+    JOIN (
+        SELECT C2.condition_report_id
+        FROM condition_report AS C2
+        WHERE C2.user_id = (SELECT user_id FROM articheck_user WHERE username = 'user0')
+        GROUP BY C2.condition_report_id
+        ) AS UserCRs
+    ON UserCRs.condition_report_id = C.condition_report_id;
