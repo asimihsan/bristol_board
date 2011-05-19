@@ -3,34 +3,79 @@ import sys
 import json
 import httplib2
 import pprint
+import logging
+
+# ----------------------------------------------------------------------
+#   Logging.
+# ----------------------------------------------------------------------
+APP_NAME = 'test_client'
+logger = logging.getLogger(APP_NAME)
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+logger = logging.getLogger(APP_NAME)
+# ----------------------------------------------------------------------
 
 SERVER = "192.168.0.195"
 PORT = "8080"
 BASE_URL = "http://%s:%s" % (SERVER, PORT)
 USERNAME = "user0"
 PASSWORD = "pass0"
-API_KEY = "29ab4d98-f2e0-4e9a-aa50-18acbdb9f1f0"
 
-def create_condition_report(h, username=USERNAME, password=PASSWORD):
+def create_condition_report(h, username=USERNAME, password=PASSWORD, compression=True):
+    logger = logging.getLogger("%s.create_condition_report" % (APP_NAME, ))
+    logger.debug("entry")
     document_blob = {"title": "Title of the art",
                      "type": "Painting"}
     data = {"api_version": "1",
             "username": username,
             "password": password,
-            "api_key": API_KEY,
-            "operation_type": "create_condition_report",
             "document_blob": document_blob}
-    print json.dumps(data)
-    resp, content = h.request("%s/create_condition_report" % (BASE_URL, ),
+    headers = {"content-type": "application/json"}
+    if not compression:
+        headers["Accept-Encoding"] = "identity"
+    resp, content = h.request("%s/condition_report" % (BASE_URL, ),
                               "POST",
                               body=json.dumps(data),
-                              headers={"content-type": "application/json"})
-    import pdb; pdb.set_trace()
+                              headers=headers)
+    logger.debug("\n\nresp:\n%s" % (pprint.pformat(resp), ))
+    logger.debug("\n\ncontent:\n%s" % (pprint.pformat(content), ))
+    return (resp, content)
+    #import pdb; pdb.set_trace()
 
+def get_condition_reports_by_username(h, username=USERNAME, password=PASSWORD, compression=True):
+    logger = logging.getLogger("%s.get_condition_reports_by_username" % (APP_NAME, ))
+    logger.debug("entry")
+    data = {"api_version": "1",
+            "username": username,
+            "password": password,
+            "get_using": "username"}
+    headers = {"content-type": "application/json"}
+    if not compression:
+        headers["Accept-Encoding"] = "identity"    
+    resp, content = h.request("%s/condition_report" % (BASE_URL, ),
+                              "GET",
+                              body=json.dumps(data),
+                              headers=headers)
+    logger.debug("\n\nresp:\n%s" % (pprint.pformat(resp), ))
+    logger.debug("\n\ncontent:\n%s" % (pprint.pformat(content), ))
+    return (resp, content)
+    
 if __name__ == "__main__":
     h = httplib2.Http()
     httplib2.debuglevel = 1    
-    create_condition_report(h)
+    
+    #create_condition_report(h)
     #create_condition_report(h, password="garbage")
+    #import pdb; pdb.set_trace()
+    
+    #get_condition_reports_by_username(h, compression=False)
+    #import pdb; pdb.set_trace()
+    get_condition_reports_by_username(h, compression=True)
+    #import pdb; pdb.set_trace()
+    #get_condition_reports_by_username(h, password="garbage", compression=True)
     
     
