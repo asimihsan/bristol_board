@@ -72,8 +72,9 @@ produce_body(ReqData, Context) ->
     case dict:fetch(get_using, Params) of
         "username" ->
             Username = dict:fetch(username, Params),
-            {return_query, ok, ConditionReports} = bb_database_server:get_condition_reports(username, Username),
-            io:format("ConditionReports: ~p~n", [ConditionReports])      
+            {return_query, ok, ConditionReports} = bb_database_server:get_condition_reports(username, Username)
+            %% io:format("ConditionReports: ~n~p~n", [ConditionReports])      
     end,
-    Result = [{condition_reports, bb_json:to_json(ConditionReports)}],
-    {Result, ReqData, Context}.
+    JsonElems = [mochijson2:encode(Elem) || Elem <- ConditionReports],    
+    SingleJson = "[" ++ string:join(JsonElems, ", ") ++ "]",
+    {SingleJson, ReqData, Context}.    .

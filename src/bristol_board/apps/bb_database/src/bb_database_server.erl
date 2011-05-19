@@ -162,10 +162,10 @@ query_is_user_password_valid(From, Pool, Username, Password) ->
     proc_lib:init_ack({query_pid, ok}),
     Result = q(Pool, "SELECT true FROM articheck_user WHERE username = $1 AND password = crypt($2, password)", [Username, Password]),        
     case Result of
-        {ok, [{true}]} ->
+        {ok, [<<"bool">>], [{true}]} ->
             bb_database_event:is_user_password_valid_return(Username, Password, {ok, true}),   
             gen_server:reply(From, {return_query, ok, true});
-        {ok, _} ->
+        {ok, [<<"bool">>], [{false}]} ->
             bb_database_event:is_user_password_valid_return(Username, Password, {ok, false}),   
             gen_server:reply(From, {return_query, ok, false});
         {error, Reason} ->
@@ -194,26 +194,23 @@ query_create_condition_report(From, Pool, Username, Contents) ->
     end.            
     
 query_get_condition_reports(From, Pool, username, Username) ->    
-    proc_lib:init_ack({query_pid, ok}),
-    
-    RQuery = q(Pool, "SELECT C.revision_id, C.condition_report_id, C.datetime_edited, C.user_id
-                       FROM condition_report as C
-                           JOIN (
-                                SELECT C1.condition_report_id, MAX(datetime_edited) AS datetime_edited
-                                FROM condition_report as C1
-                                GROUP BY C1.condition_report_id
-                                ) AS LastRevision
-                            ON LastRevision.condition_report_id = C.condition_report_id
-                            JOIN (
-                                SELECT C2.condition_report_id
-                                FROM condition_report AS C2
-                                WHERE C2.user_id = (SELECT user_id FROM articheck_user WHERE username = $1)
-                                GROUP BY C2.condition_report_id
-                            ) AS UserCRs
-                            ON UserCRs.condition_report_id = C.condition_report_id", [Username]),        
+    proc_lib:init_ack({query_pid, ok}),    
+    RQuery = q(Pool, "SELECT C.revision_id, C.condition_report_id, C.contents
+                       FROM condition_report C
+                       INNER JOIN (
+                           SELECT condition_report_id, MAX(datetime_edited) AS datetime_edited
+                           FROM condition_report
+                           WHERE user_id = (SELECT user_id FROM articheck_user WHERE username = $1)
+                           GROUP BY condition_report_id
+                       ) X
+                       ON X.condition_report_id = C.condition_report_id AND
+                          X.datetime_edited = C.datetime_edited", [Username]),            
     case RQuery of
-        {ok, Rows} ->
-            gen_server:reply(From, {return_query, ok, Rows});
+        {ok, Cols, Rows} ->
+            %% For each row zip it with the Columns, hence
+            %% replicating the column name in each row.
+            Rows2 = [ lists:zip(Cols, tuple_to_list(Row)) || Row <- Rows ],        
+            gen_server:reply(From, {return_query, ok, Rows2});
         {error, Reason} ->
             gen_server:reply(From, {return_query, error, Reason})
     end.                
@@ -225,7 +222,12 @@ q(P, Sql, Parameters) ->
     {ok, C} = get_connection(P),
     try
         case pgsql:equery(C, Sql, Parameters) of
-            {ok, _Cols, Rows} -> {ok, Rows};
+            {ok, Cols, Rows} ->
+                %% List comprehension over the list of tuples.
+                %% Get the second element of each tuple in this
+                %% list of tuples.
+                Cols2 = [ element(2, Elem) || Elem <- Cols ],
+                {ok, Cols2, Rows};
             {ok, Rows} -> {ok, Rows};
             {error, Reason} -> {error, Reason}
         end

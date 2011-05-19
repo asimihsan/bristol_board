@@ -18,8 +18,10 @@ import psycopg2
 import logging
 from string import Template
 import datetime
-import uuid
 import pprint
+import random
+import string
+import json
 
 # ----------------------------------------------------------------------
 #   Logging.
@@ -45,6 +47,10 @@ DATABASE_HOST = "localhost"
 DATABASE_PORT = 5432
 
 TEMPL_DB_CONNECT = Template("dbname=${dbname} user=${user} password=${password}")
+
+UUID_LENGTH = 32
+HEX_DIGITS = "0123456789abcdef"
+RANDOM_SEED = 0
 
 # ----------------------------------------------------------------------
 # Tables.
@@ -180,50 +186,105 @@ RANDOM_INSTITUTION = "SELECT institution_id FROM institution ORDER BY RANDOM() L
 
 INSERT_ROLE = "INSERT INTO role (role_id, role_name) VALUES (%s, %s);"
 SELECT_CONSERVATOR = "SELECT role_id FROM role WHERE role_name = 'conservator';"
+SELECT_ADMIN = "SELECT role_id FROM role WHERE role_name = 'admin';"
 
 INSERT_USER = "INSERT INTO articheck_user (user_id, institution_id, username, password, role_id, email_address) VALUES (%s, %s, %s, crypt(%s, gen_salt('bf', 8)), %s, %s);"
+
+INSERT_CONDITION_REPORT = "INSERT INTO condition_report (revision_id, condition_report_id, user_id, datetime_edited, contents) VALUES (%s, %s, %s, %s, %s);"
 # ----------------------------------------------------------------------
+
+def get_random_document():
+    title = "title %s" % (random.randint(1, 1024), )
+    body = "body %s body %s body %s" % (random.randint(1, 1024), random.randint(1, 1024), random.randint(1, 1024))
+    data = {"title": title, "body": body}
+    return json.dumps(data)
+
+def get_random_uuid():
+    return ''.join([random.choice(HEX_DIGITS) for elem in xrange(UUID_LENGTH)])
+
 def insert_dummy_data(cur):
+    """ Stuff to get some functional testing done on. """
+    
     logger = logging.getLogger("%s.insert_dummy_data" % (APP_NAME, ))
     logger.info("entry")
     
-    NUMBER_INSTITUTIONS = 5
-    NUMBER_USERS = 5
+    NUMBER_INSTITUTIONS = 1
+    NUMBER_USERS_PER_INSTITUTION = 3
+    NUMBER_DOCUMENTS_PER_INSTITUTION = 10
+    MAXIMUM_REVISIONS_PER_DOCUMENT = 10    
     
     logger.info("Inserting institutions...")
-    for i in xrange(NUMBER_INSTITUTIONS):
-        institution_id = uuid.uuid4()
+    institution_ids = []
+    for i in xrange(NUMBER_INSTITUTIONS):    
+        institution_id = get_random_uuid()
         name = "Institution %s" % (i, )
-        institution_id = str(uuid.uuid4())
-        api_key = str(uuid.uuid4())
+        institution_id = get_random_uuid()
+        api_key = get_random_uuid()
         api_key_expiry = (datetime.datetime.now() + datetime.timedelta(days=365)).replace(microsecond=0).isoformat(" ")
         args = (institution_id, name, api_key, api_key_expiry)
         logger.debug("institution insert args:\n%s" % (pprint.pformat(args), ))
         cur.execute(INSERT_INSTITUTION, args)
+        institution_ids.append(institution_id)
     
     logger.info("Inserting roles...")
-    cur.execute(INSERT_ROLE, (str(uuid.uuid4()), "registrar"))
-    cur.execute(INSERT_ROLE, (str(uuid.uuid4()), "conservator"))
+    cur.execute(INSERT_ROLE, (get_random_uuid(), "admin"))
+    cur.execute(INSERT_ROLE, (get_random_uuid(), "conservator"))
     
     logger.info("Inserting users...")    
-    for i in xrange(NUMBER_USERS):        
-        cur.execute(RANDOM_INSTITUTION)        
-        institution_id = cur.fetchone()[0]
-        
-        cur.execute(SELECT_CONSERVATOR)
+    user_ids = []
+    for i in xrange(NUMBER_INSTITUTIONS):
+        for j in xrange(NUMBER_USERS_PER_INSTITUTION):        
+            cur.execute(RANDOM_INSTITUTION)        
+            institution_id = cur.fetchone()[0]
+            
+            cur.execute(SELECT_CONSERVATOR)
+            role_id = cur.fetchone()[0]
+            
+            user_id = get_random_uuid()
+            username = "user%s" % (i*NUMBER_USERS_PER_INSTITUTION+j, )
+            password = "pass%s" % (i*NUMBER_USERS_PER_INSTITUTION+j, )
+            email_address = "user@host.com"
+            
+            args = (user_id, institution_id, username, password, role_id, email_address)
+            logger.debug("user insert args:\n%s" % (pprint.pformat(args), ))
+            cur.execute(INSERT_USER, args)      
+
+            user_ids.append(user_id)
+            
+    logger.info("Inserting administrative users...")        
+    for i in xrange(NUMBER_INSTITUTIONS):
+        institution_id = institution_ids[i]
+        cur.execute(SELECT_ADMIN)
         role_id = cur.fetchone()[0]
-        
-        user_id = str(uuid.uuid4())
-        username = "user%s" % (i, )
-        password = "pass%s" % (i, )
+        user_id = get_random_uuid()
+        username = "admin%s" % (i, )
+        password = "pass%s" %  (i, )        
         email_address = "user@host.com"
-        
         args = (user_id, institution_id, username, password, role_id, email_address)
         logger.debug("user insert args:\n%s" % (pprint.pformat(args), ))
-        cur.execute(INSERT_USER, args)        
+        cur.execute(INSERT_USER, args)                
+            
+    logger.info("Inserting documents...")    
+    for i in xrange(NUMBER_INSTITUTIONS):    
+        for j in xrange(NUMBER_DOCUMENTS_PER_INSTITUTION):
+            document_id = get_random_uuid()
+            number_revisions = random.randint(1, MAXIMUM_REVISIONS_PER_DOCUMENT)
+            for k in xrange(number_revisions):
+                revision_id = get_random_uuid()
+                user_id = random.choice(user_ids)
+                days_ago = random.randint(0, 365*2)
+                datetime_edited = datetime.datetime.now() - datetime.timedelta(days=days_ago)
+                contents = get_random_document()
+                
+                args = (revision_id, document_id, user_id, datetime_edited, contents)
+                logger.debug("user insert args:\n%s" % (pprint.pformat(args), ))
+                cur.execute(INSERT_CONDITION_REPORT, args)
 
 if __name__ == "__main__":
     logger.info("Starting main.  args: %s" % (sys.argv[1:], ))
+    
+    logger.info("Seeding random generator with: %s" % (RANDOM_SEED, ))
+    random.seed(RANDOM_SEED)
     
     logger.debug("Opening database connection and cursor...")
     conn = psycopg2.connect(TEMPL_DB_CONNECT.substitute(dbname=DATABASE_NAME,
