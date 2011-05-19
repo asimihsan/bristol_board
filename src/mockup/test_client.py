@@ -1,3 +1,16 @@
+# ----------------------------------------------------------------------
+# Copyright (c) 2011 Asim Ihsan (asim dot ihsan at gmail dot com)
+# ----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
+# File: bristol_board/src/mockup/test_client.py
+#
+# Run functional verification tests against the server.
+#
+# Right now assumes that create_table.py has been executed with
+# RANDOM_SEED = 0.
+# ----------------------------------------------------------------------
+
 import os
 import sys
 import json
@@ -17,6 +30,7 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 logger = logging.getLogger(APP_NAME)
+logger.setLevel(logging.INFO)
 # ----------------------------------------------------------------------
 
 SERVER = "192.168.0.195"
@@ -64,18 +78,22 @@ def get_condition_reports_by_username(h, username=USERNAME, password=PASSWORD, c
     logger.debug("\n\ncontent:\n%s" % (pprint.pformat(content), ))
     return (resp, content)
     
-if __name__ == "__main__":
-    h = httplib2.Http()
-    httplib2.debuglevel = 1    
+if __name__ == "__main__":    
+    logger.setLevel(logging.DEBUG)
+    httplib2.debuglevel = 1
+    logger.info("starting")
     
-    #create_condition_report(h)
-    #create_condition_report(h, password="garbage")
+    h = httplib2.Http()    
+    #(resp, content) = create_condition_report(h)
+    #(resp, content) = create_condition_report(h, password="garbage")
+    #(resp, content) = import pdb; pdb.set_trace()
+    
+    #(resp, content) = get_condition_reports_by_username(h, compression=False)
     #import pdb; pdb.set_trace()
     
-    #get_condition_reports_by_username(h, compression=False)
-    #import pdb; pdb.set_trace()
-    get_condition_reports_by_username(h, compression=True)
-    #import pdb; pdb.set_trace()
-    #get_condition_reports_by_username(h, password="garbage", compression=True)
+    (resp, content) = get_condition_reports_by_username(h, compression=True)
+    import pdb; pdb.set_trace()
+    
+    #(resp, content) = get_condition_reports_by_username(h, password="garbage", compression=True)
     
     

@@ -1,0 +1,10 @@
+SELECT C.*
+FROM condition_report C
+INNER JOIN (
+    SELECT condition_report_id, MAX(datetime_edited) AS datetime_edited
+    FROM condition_report
+    WHERE user_id = (SELECT user_id FROM articheck_user WHERE username = 'user0')
+    GROUP BY condition_report_id
+) X
+ON X.condition_report_id = C.condition_report_id AND
+   X.datetime_edited = C.datetime_edited;
