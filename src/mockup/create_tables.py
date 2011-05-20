@@ -273,7 +273,7 @@ def insert_dummy_data(cur):
                 revision_id = get_random_uuid()
                 user_id = random.choice(user_ids)
                 days_ago = random.randint(0, 365*2)
-                datetime_edited = datetime.datetime.now() - datetime.timedelta(days=days_ago)
+                datetime_edited = (datetime.datetime.now() - datetime.timedelta(days=days_ago)).replace(microsecond=0)
                 contents = get_random_document()
                 
                 args = (revision_id, document_id, user_id, datetime_edited, contents)

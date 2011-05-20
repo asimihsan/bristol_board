@@ -77,4 +77,4 @@ produce_body(ReqData, Context) ->
     end,
     JsonElems = [mochijson2:encode(Elem) || Elem <- ConditionReports],    
     SingleJson = "[" ++ string:join(JsonElems, ", ") ++ "]",
-    {SingleJson, ReqData, Context}.    .
+    {SingleJson, ReqData, Context}.

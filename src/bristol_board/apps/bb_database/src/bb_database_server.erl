@@ -195,7 +195,7 @@ query_create_condition_report(From, Pool, Username, Contents) ->
     
 query_get_condition_reports(From, Pool, username, Username) ->    
     proc_lib:init_ack({query_pid, ok}),    
-    RQuery = q(Pool, "SELECT C.revision_id, C.condition_report_id, C.contents
+    RQuery = q(Pool, "SELECT C.revision_id, C.condition_report_id, C.contents, C.datetime_edited
                        FROM condition_report C
                        INNER JOIN (
                            SELECT condition_report_id, MAX(datetime_edited) AS datetime_edited
@@ -207,9 +207,16 @@ query_get_condition_reports(From, Pool, username, Username) ->
                           X.datetime_edited = C.datetime_edited", [Username]),            
     case RQuery of
         {ok, Cols, Rows} ->
+            %% Format the last element of each row, i.e. the datetime.
+            RowsDate = [ [element(1, Row),
+                         element(2, Row),
+                         element(3, Row),
+                         erlang:iolist_to_binary(dh_date:format("Y-m-d H:i:s", element(4, Row)))] || Row <- Rows ],
+            io:format("RowsDate: ~n~p~n", [RowsDate]),
+        
             %% For each row zip it with the Columns, hence
             %% replicating the column name in each row.
-            Rows2 = [ lists:zip(Cols, tuple_to_list(Row)) || Row <- Rows ],        
+            Rows2 = [ lists:zip(Cols, Row) || Row <- RowsDate ],        
             gen_server:reply(From, {return_query, ok, Rows2});
         {error, Reason} ->
             gen_server:reply(From, {return_query, error, Reason})
@@ -223,6 +230,8 @@ q(P, Sql, Parameters) ->
     try
         case pgsql:equery(C, Sql, Parameters) of
             {ok, Cols, Rows} ->
+                %% Get the column name from Cols.
+                %%
                 %% List comprehension over the list of tuples.
                 %% Get the second element of each tuple in this
                 %% list of tuples.
